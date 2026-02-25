@@ -8,12 +8,14 @@ from pydantic import BaseModel
 class KeywordCreate(BaseModel):
     name: str
     alert_price: float
+    category_id: Optional[int] = None  # 可选分类ID，例如 887=滑雪板
     is_active: bool = True
 
 
 class KeywordUpdate(BaseModel):
     name: Optional[str] = None
     alert_price: Optional[float] = None
+    category_id: Optional[int] = None
     is_active: Optional[bool] = None
 
 
@@ -21,6 +23,7 @@ class KeywordOut(BaseModel):
     id: int
     name: str
     alert_price: float
+    category_id: Optional[int]
     is_active: bool
     created_at: datetime
     updated_at: datetime

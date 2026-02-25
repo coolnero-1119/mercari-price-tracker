@@ -10,8 +10,13 @@ logger = logging.getLogger(__name__)
 
 
 def _mercari_item_to_dict(item) -> Optional[dict]:
-    """将 mercapi Item 对象转为字典"""
+    """将 mercapi SearchResultItem 对象转为字典"""
     try:
+        # mercapi 0.4+ 使用 id_ 而非 id
+        mercari_id = str(item.id_) if hasattr(item, "id_") else str(getattr(item, "id", ""))
+        if not mercari_id:
+            return None
+
         price = None
         if hasattr(item, "price") and item.price is not None:
             price = int(item.price)
@@ -19,17 +24,15 @@ def _mercari_item_to_dict(item) -> Optional[dict]:
         image_url = ""
         if hasattr(item, "thumbnails") and item.thumbnails:
             image_url = str(item.thumbnails[0])
-        elif hasattr(item, "photos") and item.photos:
-            image_url = str(item.photos[0])
 
-        product_url = f"https://jp.mercari.com/item/{item.id}" if hasattr(item, "id") else ""
+        product_url = f"https://jp.mercari.com/item/{mercari_id}"
 
         condition = ""
-        if hasattr(item, "item_condition") and item.item_condition:
-            condition = str(item.item_condition.name if hasattr(item.item_condition, "name") else item.item_condition)
+        if hasattr(item, "item_condition_id") and item.item_condition_id is not None:
+            condition = str(item.item_condition_id)
 
         return {
-            "mercari_id": str(item.id),
+            "mercari_id": mercari_id,
             "title": str(item.name) if hasattr(item, "name") else "",
             "price": price,
             "image_url": image_url,
@@ -41,18 +44,23 @@ def _mercari_item_to_dict(item) -> Optional[dict]:
         return None
 
 
-async def crawl_keyword(db: Session, keyword_id: int, keyword_name: str, alert_price: float):
+async def crawl_keyword(db: Session, keyword_id: int, keyword_name: str, alert_price: float, category_id: Optional[int] = None):
     """爬取单个关键词的商品"""
     try:
         from mercapi import Mercapi
         m = Mercapi()
 
-        logger.info(f"开始爬取关键词: {keyword_name}")
+        cat_info = f" [分类:{category_id}]" if category_id else ""
+        logger.info(f"开始爬取关键词: {keyword_name}{cat_info}")
 
         # 滚动覆盖：先删除该关键词的旧数据
         crud.delete_items_by_keyword(db, keyword_id)
 
-        results = await m.search(keyword_name)
+        search_kwargs = {}
+        if category_id:
+            search_kwargs["categories"] = [category_id]
+
+        results = await m.search(keyword_name, **search_kwargs)
         items = results.items if results and hasattr(results, "items") else []
 
         # 最多取 MAX_ITEMS_PER_KEYWORD 条
@@ -109,7 +117,7 @@ async def run_crawl():
             return
 
         for kw in keywords:
-            await crawl_keyword(db, kw.id, kw.name, kw.alert_price)
+            await crawl_keyword(db, kw.id, kw.name, kw.alert_price, kw.category_id)
 
         logger.info("========== 爬取任务完成 ==========")
     finally:
