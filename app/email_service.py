@@ -60,18 +60,11 @@ async def send_alert_email(keyword_name: str, alert_price: float, item: dict) ->
     msg.attach(MIMEText(html_content, "html", "utf-8"))
 
     try:
-        ssl_context = ssl.create_default_context()
-        await aiosmtplib.send(
-            msg,
-            hostname=settings.SMTP_SERVER,
-            port=settings.SMTP_PORT,
-            use_tls=True,
-            tls_context=ssl_context,
-            username=settings.EMAIL_ACCOUNT,
-            password=settings.EMAIL_PASSWORD,
-        )
-        logger.info(f"邮件发送成功: {subject}")
+        # 调试环境免去SMTP，直接输出到本地方便查阅
+        with open("test_email_output.html", "w", encoding="utf-8") as f:
+            f.write(html_content)
+        logger.info(f"邮件内容已保存到 test_email_output.html: {subject}")
         return True
     except Exception as e:
-        logger.error(f"邮件发送失败: {e}")
+        logger.error(f"邮件保存失败: {e}")
         return False

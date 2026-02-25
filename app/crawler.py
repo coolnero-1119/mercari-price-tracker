@@ -1,5 +1,6 @@
+import inspect
 import logging
-from typing import Optional
+from typing import Any, Iterable, Optional
 from sqlalchemy.orm import Session
 from app import crud
 from app.database import SessionLocal
@@ -44,6 +45,61 @@ def _mercari_item_to_dict(item) -> Optional[dict]:
         return None
 
 
+async def _maybe_await(result: Any) -> Any:
+    """兼容同步/异步返回值"""
+    if inspect.isawaitable(result):
+        return await result
+    return result
+
+
+def _extract_items(results: Any) -> list:
+    """兼容不同版本 mercapi 的返回结构"""
+    if results is None:
+        return []
+    if isinstance(results, list):
+        return results
+    if hasattr(results, "items"):
+        return list(getattr(results, "items") or [])
+    if isinstance(results, dict) and "items" in results:
+        return list(results.get("items") or [])
+    return []
+
+
+async def _search_with_category_fallback(
+    mercari_client: Any, keyword_name: str, category_id: Optional[int]
+) -> Any:
+    """尝试不同的分类参数名以兼容 mercapi 版本差异"""
+    try:
+        from mercapi.requests.search import SearchRequestData
+        status_filter = [SearchRequestData.Status.STATUS_ON_SALE]
+    except ImportError:
+        status_filter = []
+
+    if not category_id:
+        if status_filter:
+            return await _maybe_await(mercari_client.search(keyword_name, status=status_filter))
+        return await _maybe_await(mercari_client.search(keyword_name))
+
+    attempts: Iterable[tuple[str, Any]] = (
+        ("categories", [category_id]),
+        ("category_id", category_id),
+        ("category_ids", [category_id]),
+    )
+    for param_name, value in attempts:
+        try:
+            kwargs = {param_name: value}
+            if status_filter:
+                kwargs["status"] = status_filter
+            return await _maybe_await(mercari_client.search(keyword_name, **kwargs))
+        except TypeError as e:
+            logger.warning(f"分类参数 {param_name} 不被支持，尝试其他参数: {e}")
+
+    logger.warning("分类参数均不被支持，改为无分类搜索")
+    if status_filter:
+        return await _maybe_await(mercari_client.search(keyword_name, status=status_filter))
+    return await _maybe_await(mercari_client.search(keyword_name))
+
+
 async def crawl_keyword(db: Session, keyword_id: int, keyword_name: str, alert_price: float, category_id: Optional[int] = None):
     """爬取单个关键词的商品"""
     try:
@@ -56,12 +112,8 @@ async def crawl_keyword(db: Session, keyword_id: int, keyword_name: str, alert_p
         # 滚动覆盖：先删除该关键词的旧数据
         crud.delete_items_by_keyword(db, keyword_id)
 
-        search_kwargs = {}
-        if category_id:
-            search_kwargs["categories"] = [category_id]
-
-        results = await m.search(keyword_name, **search_kwargs)
-        items = results.items if results and hasattr(results, "items") else []
+        results = await _search_with_category_fallback(m, keyword_name, category_id)
+        items = _extract_items(results)
 
         # 最多取 MAX_ITEMS_PER_KEYWORD 条
         items = items[: settings.MAX_ITEMS_PER_KEYWORD]
