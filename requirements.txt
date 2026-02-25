@@ -1,0 +1,8 @@
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+sqlalchemy>=2.0.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+aiosmtplib>=3.0.0
+apscheduler>=3.10.0
+mercapi>=0.2.0
