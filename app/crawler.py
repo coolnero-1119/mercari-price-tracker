@@ -32,6 +32,18 @@ def _mercari_item_to_dict(item) -> Optional[dict]:
         if hasattr(item, "item_condition_id") and item.item_condition_id is not None:
             condition = str(item.item_condition_id)
 
+        seller = ""
+        try:
+            if hasattr(item, "seller") and item.seller:
+                if hasattr(item.seller, "name"):
+                    seller = str(item.seller.name)
+                elif hasattr(item.seller, "id"):
+                    seller = str(item.seller.id)
+                else:
+                    seller = str(item.seller)
+        except Exception:
+            pass
+
         return {
             "mercari_id": mercari_id,
             "title": str(item.name) if hasattr(item, "name") else "",
@@ -39,6 +51,7 @@ def _mercari_item_to_dict(item) -> Optional[dict]:
             "image_url": image_url,
             "product_url": product_url,
             "condition": condition,
+            "seller": seller,
         }
     except Exception as e:
         logger.warning(f"解析商品数据失败: {e}")
@@ -143,6 +156,7 @@ async def crawl_keyword(db: Session, keyword_id: int, keyword_name: str, alert_p
                             "title": db_item.title,
                             "image_url": db_item.image_url,
                             "product_url": db_item.product_url,
+                            "seller": item_data.get("seller", "未知卖家"),
                         },
                     )
                     crud.create_alert_log(

@@ -13,6 +13,7 @@ def _build_html(keyword_name: str, alert_price: float, item: dict) -> str:
     title = item.get("title", "未知商品")
     image_url = item.get("image_url", "")
     product_url = item.get("product_url", "#")
+    seller = item.get("seller", "未知卖家")
 
     image_tag = f'<img src="{image_url}" alt="商品图片" style="max-width:300px;border-radius:8px;"/>' if image_url else ""
 
@@ -33,6 +34,7 @@ def _build_html(keyword_name: str, alert_price: float, item: dict) -> str:
       </div>
       {image_tag}
       <p style="font-size:15px;margin-top:16px;">{title}</p>
+      <p style="font-size:14px;color:#666;margin-top:8px;">卖家信息：{seller}</p>
       <a href="{product_url}" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#e74c3c;color:#fff;border-radius:6px;text-decoration:none;font-weight:bold;">
         立即查看商品 →
       </a>
@@ -60,11 +62,18 @@ async def send_alert_email(keyword_name: str, alert_price: float, item: dict) ->
     msg.attach(MIMEText(html_content, "html", "utf-8"))
 
     try:
-        # 调试环境免去SMTP，直接输出到本地方便查阅
-        with open("test_email_output.html", "w", encoding="utf-8") as f:
-            f.write(html_content)
-        logger.info(f"邮件内容已保存到 test_email_output.html: {subject}")
+        ssl_context = ssl.create_default_context()
+        await aiosmtplib.send(
+            msg,
+            hostname=settings.SMTP_SERVER,
+            port=settings.SMTP_PORT,
+            use_tls=True,
+            tls_context=ssl_context,
+            username=settings.EMAIL_ACCOUNT,
+            password=settings.EMAIL_PASSWORD,
+        )
+        logger.info(f"✅ 邮件发送成功: {subject}")
         return True
     except Exception as e:
-        logger.error(f"邮件保存失败: {e}")
+        logger.error(f"❌ 邮件发送失败: {e}")
         return False
