@@ -12,6 +12,13 @@ class Settings(BaseSettings):
     EMAIL_PASSWORD: str = "yiln cgng tduf cytr"
     EMAIL_RECIPIENT: str = "691708292@qq.com"
 
+    # Telegram 配置
+    TELEGRAM_USER_ID: str = "7498035970"
+
+    # OpenClaw Webhook 配置
+    OPENCLAW_WEBHOOK_URL: str = "http://127.0.0.1:18789/hooks/agent"
+    OPENCLAW_GATEWAY_TOKEN: str = "mercari-webhook-secret-token"
+
     # 调度配置（分钟）
     NORMAL_MIN_INTERVAL: int = 20
     NORMAL_MAX_INTERVAL: int = 40

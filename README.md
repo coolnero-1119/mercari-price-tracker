@@ -9,9 +9,11 @@
 - **关键词管理**：增删改查，支持随时启用/暂停
 - **分类筛选**：通过 `category_id` 精准锁定商品类别（如只搜滑雪板，过滤掉车模）
 - **自动爬取**：每 20-40 分钟随机间隔爬取；夜间 0-7 点降低至 45-90 分钟
-- **价格预警**：商品价格 ≤ 预警价格时自动发送 HTML 邮件
+- **预警通知**：商品价格 ≤ 预警价格时，自动发送 HTML 邮件，并直接推送到个人的 Telegram 获取通知
+- **仅看在售**：内置状态过滤，系统只抓取当前仍在售卖的有效商品，过滤历史废弃链接
 - **数据管理**：每次爬取滚动覆盖商品数据，同时保留完整价格历史
 - **Web API**：FastAPI 提供完整 REST 接口 + Swagger 可视化文档
+- **后台守护**：完美支持 Systemd 接管，实现崩溃自动重启与开机自启动
 
 ---
 
@@ -39,6 +41,48 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 |------|------|
 | http://localhost:8000 | 服务状态 |
 | http://localhost:8000/docs | Swagger 可视化文档（推荐） |
+
+---
+
+## 生产部署 (Systemd 开机自启)
+
+如需后台安全持久化运行，请建立 Systemd 进程服务：
+
+```bash
+# 1. 写入配置文件
+sudo nano /etc/systemd/system/mercari-tracker.service
+```
+
+填入以下内容（注意替换为您自己的绝对路径）：
+```ini
+[Unit]
+Description=Mercari Price Tracker FastAPI Service
+After=network.target
+
+[Service]
+User=root
+Group=root
+WorkingDirectory=/root/mercari-price-tracker
+Environment="PATH=/root/mercari-price-tracker/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ExecStart=/root/mercari-price-tracker/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+StandardOutput=append:/root/mercari-price-tracker/server.log
+StandardError=append:/root/mercari-price-tracker/server.log
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+# 2. 启用并启动守护进程
+sudo systemctl daemon-reload
+sudo systemctl enable mercari-tracker.service
+sudo systemctl restart mercari-tracker.service
+
+# 查看实时运行日志
+tail -f server.log
+```
 
 ---
 
@@ -138,15 +182,25 @@ curl -X POST http://localhost:8000/api/trigger-crawl
 
 ---
 
-## 邮件预警
+## 预警通知
 
-当爬取到的商品价格 ≤ 设置的 `alert_price` 时，系统自动向配置的收件人发送 HTML 格式邮件，内容包含：
+当爬取到的商品价格 ≤ 设置的 `alert_price` 时，系统自动通过以下两种方式并行发送通知：
 
+### 1. Telegram 机器人通知（推荐优先使用）
+自带对接 OpenClaw CLI 并行异步子线程调用。直接将图文推送到个人聊天框。
+需要在 `app/config.py` 或者 `.env` 中配置目标 Telegram 用户 ID：
+```env
+TELEGRAM_USER_ID=7498035970
+```
+
+### 2. Email 邮件预警
+系统支持标准的 SMTP (端口 465 SSL) 连接发送内容详尽的 HTML 安全邮件，内容包含：
 - 关键词名称 & 预警价格
 - 商品图片、标题、当前价格
-- 一键跳转查看商品的按钮
+- 卖家详细信息
+- 一键跳转查看商品的专属按钮
 
-邮件配置在 `app/config.py` 中修改，或通过项目根目录的 `.env` 文件覆盖。
+> ⚠️ 注意：如部署在 DigitalOcean 等具有出站防火墙规则限制的云服务器上，可能需要提工单请求解除 `465` 端口封锁才能成功发送。如果仅使用 Telegram，可以无视此限制。
 
 ---
 

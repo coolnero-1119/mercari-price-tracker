@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app import crud
 from app.database import SessionLocal
 from app.email_service import send_alert_email
+from app.telegram_service import send_telegram_alert
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -24,7 +25,9 @@ def _mercari_item_to_dict(item) -> Optional[dict]:
 
         image_url = ""
         if hasattr(item, "thumbnails") and item.thumbnails:
-            image_url = str(item.thumbnails[0])
+            # Telegram Bot API 不支持直接发送 WebP 格式的图片(或者会返回400)
+            # 所以我们将缩略图强制替换为 Mercari 的商品原图 JPEG 大图
+            image_url = f"https://static.mercdn.net/item/detail/orig/photos/{mercari_id}_1.jpg"
 
         product_url = f"https://jp.mercari.com/item/{mercari_id}"
 
@@ -34,7 +37,9 @@ def _mercari_item_to_dict(item) -> Optional[dict]:
 
         seller = ""
         try:
-            if hasattr(item, "seller") and item.seller:
+            if hasattr(item, "seller_id") and item.seller_id:
+                seller = str(item.seller_id)
+            elif getattr(item, "seller", None) and not callable(item.seller):
                 if hasattr(item.seller, "name"):
                     seller = str(item.seller.name)
                 elif hasattr(item.seller, "id"):
@@ -132,10 +137,14 @@ async def crawl_keyword(db: Session, keyword_id: int, keyword_name: str, alert_p
         items = items[: settings.MAX_ITEMS_PER_KEYWORD]
         logger.info(f"关键词 [{keyword_name}] 获取到 {len(items)} 条商品")
 
+        alert_items = []
+
         for raw_item in items:
             item_data = _mercari_item_to_dict(raw_item)
             if not item_data:
                 continue
+                
+            seller_val = item_data.pop("seller", "未知卖家")
 
             db_item = crud.create_item(db, keyword_id=keyword_id, item_data=item_data)
 
@@ -148,25 +157,46 @@ async def crawl_keyword(db: Session, keyword_id: int, keyword_name: str, alert_p
                     logger.info(
                         f"触发预警! 商品: {db_item.title}, 价格: {db_item.price}, 预警线: {alert_price}"
                     )
-                    email_sent = await send_alert_email(
-                        keyword_name=keyword_name,
-                        alert_price=alert_price,
-                        item={
-                            "price": db_item.price,
-                            "title": db_item.title,
-                            "image_url": db_item.image_url,
-                            "product_url": db_item.product_url,
-                            "seller": item_data.get("seller", "未知卖家"),
-                        },
-                    )
-                    crud.create_alert_log(
-                        db,
-                        keyword_id=keyword_id,
-                        item_id=db_item.id,
-                        alert_price=alert_price,
-                        actual_price=float(db_item.price),
-                        email_sent=email_sent,
-                    )
+                    
+                    # 收集预警商品
+                    alert_items.append({
+                        "id": db_item.id,
+                        "price": db_item.price,
+                        "title": db_item.title,
+                        "image_url": db_item.image_url,
+                        "product_url": db_item.product_url,
+                        "seller": seller_val,
+                    })
+
+        # 批量发送预警通知
+        if alert_items:
+            # 通过 Telegram 发送
+            telegram_sent = await send_telegram_alert(
+                keyword_name=keyword_name,
+                alert_price=alert_price,
+                items=alert_items,
+            )
+            
+            # 通过 Email 发送 (如果配置成功)
+            email_sent = await send_alert_email(
+                keyword_name=keyword_name,
+                alert_price=alert_price,
+                items=alert_items,
+            )
+            
+            # 使用二者之一成功的状态
+            is_sent = telegram_sent or email_sent
+            
+            # 记录发送状态
+            for alert_item in alert_items:
+                crud.create_alert_log(
+                    db,
+                    keyword_id=keyword_id,
+                    item_id=alert_item["id"],
+                    alert_price=alert_price,
+                    actual_price=float(alert_item["price"]),
+                    email_sent=is_sent,
+                )
 
     except Exception as e:
         logger.error(f"爬取关键词 [{keyword_name}] 失败: {e}", exc_info=True)
