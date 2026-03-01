@@ -184,14 +184,10 @@ curl -X POST http://localhost:8000/api/trigger-crawl
 
 ## 预警通知
 
-当爬取到的商品价格 ≤ 设置的 `alert_price` 时，系统自动通过以下两种方式并行发送通知：
+当爬取到的商品价格 ≤ 设置的 `alert_price` 时，系统自动通过以发送通知：
 
-### 1. Telegram 机器人通知（推荐优先使用）
-自带对接 OpenClaw CLI 并行异步子线程调用。直接将图文推送到个人聊天框。
-需要在 `app/config.py` 或者 `.env` 中配置目标 Telegram 用户 ID：
-```env
-TELEGRAM_USER_ID=7498035970
-```
+### 1. Telegram 群组图文预警通知（主要途径）
+系统内置对接了 Telegram Bot API，直接将高颜值的富文本图文卡片推送到个人或群组聊天框。需要在 `app/email_service.py` 代码内直接配置目标 Bot Token 与群组/联系人 ID (目前代码默认为测试群组)。
 
 ### 2. Email 邮件预警
 系统支持标准的 SMTP (端口 465 SSL) 连接发送内容详尽的 HTML 安全邮件，内容包含：
@@ -200,7 +196,7 @@ TELEGRAM_USER_ID=7498035970
 - 卖家详细信息
 - 一键跳转查看商品的专属按钮
 
-> ⚠️ 注意：如部署在 DigitalOcean 等具有出站防火墙规则限制的云服务器上，可能需要提工单请求解除 `465` 端口封锁才能成功发送。如果仅使用 Telegram，可以无视此限制。
+> ⚠️ 注意：如部署在 DigitalOcean 等具有出站防火墙规则限制的云服务器上，可能需要提工单请求解除 `465` 端口封锁才能成功发送。目前通过内置的 Telegram 回调，即使无视该封禁限制依然可以秒推群组！
 
 ---
 

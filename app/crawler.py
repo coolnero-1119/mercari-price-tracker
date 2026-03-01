@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 from app import crud
 from app.database import SessionLocal
 from app.email_service import send_alert_email
-from app.telegram_service import send_telegram_alert
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -170,14 +169,7 @@ async def crawl_keyword(db: Session, keyword_id: int, keyword_name: str, alert_p
 
         # 批量发送预警通知
         if alert_items:
-            # 通过 Telegram 发送
-            telegram_sent = await send_telegram_alert(
-                keyword_name=keyword_name,
-                alert_price=alert_price,
-                items=alert_items,
-            )
-            
-            # 通过 Email 发送 (如果配置成功)
+            # 通过 Email/Telegram Webhook API 发送
             email_sent = await send_alert_email(
                 keyword_name=keyword_name,
                 alert_price=alert_price,
@@ -185,7 +177,7 @@ async def crawl_keyword(db: Session, keyword_id: int, keyword_name: str, alert_p
             )
             
             # 使用二者之一成功的状态
-            is_sent = telegram_sent or email_sent
+            is_sent = email_sent
             
             # 记录发送状态
             for alert_item in alert_items:
