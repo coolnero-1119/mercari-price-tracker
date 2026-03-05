@@ -140,3 +140,45 @@ def get_stats(db: Session) -> dict:
         "total_alerts": total_alerts,
         "last_crawl_time": last_crawl_time,
     }
+
+
+# ─────────────── BlockedItems ───────────────
+
+def is_item_blocked(db: Session, mercari_id: str) -> bool:
+    """检查商品是否被屏蔽"""
+    return db.query(models.BlockedItem).filter(
+        models.BlockedItem.mercari_id == mercari_id
+    ).first() is not None
+
+
+def block_item(db: Session, mercari_id: str, title: str = "") -> models.BlockedItem:
+    """将商品加入屏蔽列表（幂等，已存在则直接返回）"""
+    existing = db.query(models.BlockedItem).filter(
+        models.BlockedItem.mercari_id == mercari_id
+    ).first()
+    if existing:
+        return existing
+    blocked = models.BlockedItem(mercari_id=mercari_id, title=title)
+    db.add(blocked)
+    db.commit()
+    db.refresh(blocked)
+    return blocked
+
+
+def unblock_item(db: Session, mercari_id: str) -> bool:
+    """解除商品屏蔽"""
+    item = db.query(models.BlockedItem).filter(
+        models.BlockedItem.mercari_id == mercari_id
+    ).first()
+    if not item:
+        return False
+    db.delete(item)
+    db.commit()
+    return True
+
+
+def get_blocked_items(db: Session) -> List[models.BlockedItem]:
+    """获取所有屏蔽记录"""
+    return db.query(models.BlockedItem).order_by(
+        models.BlockedItem.blocked_at.desc()
+    ).all()

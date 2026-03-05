@@ -1,10 +1,12 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import create_tables
 from app.scheduler import start_scheduler, stop_scheduler
-from app.api import keywords, products, stats
+from app.api import keywords, products, stats, telegram_webhook
+from app.telegram_poller import telegram_poll_loop
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,8 +21,11 @@ async def lifespan(app: FastAPI):
     create_tables()
     logger.info("数据库表已初始化")
     start_scheduler()
+    # 启动 Telegram 长轮询受理屏蔽按钮回调
+    poll_task = asyncio.create_task(telegram_poll_loop())
     yield
     # 关闭时
+    poll_task.cancel()
     stop_scheduler()
 
 
@@ -42,6 +47,7 @@ app.add_middleware(
 app.include_router(keywords.router)
 app.include_router(products.router)
 app.include_router(stats.router)
+app.include_router(telegram_webhook.router)
 
 
 @app.get("/", tags=["root"])

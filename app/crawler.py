@@ -153,13 +153,21 @@ async def crawl_keyword(db: Session, keyword_id: int, keyword_name: str, alert_p
 
                 # 价格预警检查
                 if db_item.price <= alert_price:
+                    # 检查是否已被用户屏蔽
+                    if crud.is_item_blocked(db, db_item.mercari_id):
+                        logger.debug(
+                            f"商品已屏蔽，跳过: {db_item.title} ({db_item.mercari_id})"
+                        )
+                        continue
+
                     logger.info(
                         f"触发预警! 商品: {db_item.title}, 价格: {db_item.price}, 预警线: {alert_price}"
                     )
                     
-                    # 收集预警商品
+                    # 收集预警商品 (带 mercari_id 供 Telegram inline 按钮使用)
                     alert_items.append({
                         "id": db_item.id,
+                        "mercari_id": db_item.mercari_id,
                         "price": db_item.price,
                         "title": db_item.title,
                         "image_url": db_item.image_url,

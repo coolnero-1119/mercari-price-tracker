@@ -62,3 +62,13 @@ class AlertLog(Base):
 
     keyword = relationship("Keyword", back_populates="alert_logs")
     item = relationship("Item", back_populates="alert_logs")
+
+
+class BlockedItem(Base):
+    """用户手动屏蔽的商品，不再触发价格预警"""
+    __tablename__ = "blocked_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    mercari_id = Column(String(50), nullable=False, unique=True, index=True)
+    title = Column(String(500), nullable=True)  # 冗余存储便于展示
+    blocked_at = Column(DateTime, default=datetime.utcnow)
