@@ -10,6 +10,8 @@
 - **分类筛选**：通过 `category_id` 精准锁定商品类别（如只搜滑雪板，过滤掉车模）
 - **自动爬取**：每 20-40 分钟随机间隔爬取；夜间 0-7 点降低至 45-90 分钟
 - **预警通知**：商品价格 ≤ 预警价格时，自动发送 HTML 邮件，并直接推送到个人的 Telegram 获取通知
+- **一键屏蔽**：在 Telegram 推送卡片上点击「🚫 屏蔽此商品」，该商品就不再推送
+- **屏蔽管理**：通过 API 查看和解除屏蔽列表
 - **仅看在售**：内置状态过滤，系统只抓取当前仍在售卖的有效商品，过滤历史废弃链接
 - **数据管理**：每次爬取滚动覆盖商品数据，同时保留完整价格历史
 - **Web API**：FastAPI 提供完整 REST 接口 + Swagger 可视化文档
@@ -170,6 +172,22 @@ curl http://localhost:8000/api/stats
 # 手动立即触发一次爬取
 curl -X POST http://localhost:8000/api/trigger-crawl
 ```
+
+### 5. 管理屏蔽列表
+
+屏蔽功能说明：屏蔽的商品即便价格再度低于预警线，也不会再次推送。
+
+```bash
+# 查看所有已屏蔽的商品
+curl http://localhost:8000/api/blocked-items
+
+# 解除屏蔽（用商品的 Mercari ID，从屏蔽列表中取得）
+curl -X DELETE http://localhost:8000/api/blocked-items/m123456789
+```
+
+屏蔽操作 **不需要进入服务器**，在 Telegram 群组里点击商品卡片上的「🚫 屏蔽此商品」按钮即可完成。
+
+> 提示：屏蔽列表也可在 Swagger 界面操作：http://localhost:8000/docs
 
 ---
 
